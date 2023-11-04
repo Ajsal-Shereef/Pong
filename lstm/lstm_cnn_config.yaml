@@ -1,16 +1,16 @@
-LSTM:
-    size : 500
+REWARD_LEARNING:
+    size : 1000
     feature_size : 7
     input_size : 6
     n_actions : 3
     action_embedding_dim : 6
     return_scaling : 1
     continuous_pred_factor : 0.10
-    batch_size : 1000
-    n_units : 2048
+    batch_size : 5000
+    n_units : 512
     n_layers : 1 #This is number of LSTM layers
     early_stopping_patience : 9
-    n_update : 50000
+    n_update : 5
     rudder_log_dir : "log/rudder"
     episode_delay_rudder : 1
     save_trajectory : False
@@ -22,7 +22,7 @@ LSTM:
     is_FiLM : True
     is_feedback_binary : False
     is_load_lstm : False
-    lstm_model_dir : "Result/2023-10-15_21-06-56_377WV3/lstm_2048.tar"
+    model_dir : "Result/2023-10-26_11-58-25_Z8RXJH/lstm.tar"
 MLP:
     fc_hidden_sizes : [32]
     embed_size : 32

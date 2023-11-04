@@ -48,7 +48,9 @@ class MLP(nn.Module):
         linear_layer=nn.Linear,
         use_output_layer=True,
         n_category=-1,
-        init_fn=init_layer_uniform
+        drop_out = 0,
+        init_fn=init_layer_uniform,
+        dropout_prob = 0
     ):
         """
         Initialize.
@@ -84,21 +86,21 @@ class MLP(nn.Module):
         #     self.__setattr__("hidden_fc{}".format(i), fc)
         #     self.hidden_layers.append(fc)
         
+        
         in_size = self.input_size
         self.hidden_layers = nn.Sequential()
         for i, next_size in enumerate(hidden_sizes):
-            #fc = self.linear_layer(in_size, next_size)
-            fc = Linear(in_size, next_size, nn.ReLU())
+            fc = Linear(in_size, next_size, post_activation = self.hidden_activation, dropout_prob = dropout_prob)
             in_size = next_size
-            self.hidden_layers.add_module("hidden_fc_{}".format(i), fc)
+            self.hidden_layers.add_module("hidden_fc_{}".format(i),fc)
 
         # set output layers
         if self.use_output_layer:
             self.output_layer = self.linear_layer(in_size, output_size)
             self.output_layer = init_fn(self.output_layer)
         else:
-            self.output_layer = self.linear_layer(input_size, output_size)
-            self.output_activation = self.output_activation
+            self.output_layer = identity
+            self.output_activation = identity
 
     def forward(self, x):
         """
@@ -141,12 +143,14 @@ class Linear(nn.Module):
         self,
         in_dim, 
         out_dim,
-        post_activation = identity
+        post_activation = identity,
+        dropout_prob = 0,
         ):
         super(Linear, self).__init__()
 
         self.linear_layer = nn.Linear(in_dim, out_dim)
         nn.init.xavier_uniform_(self.linear_layer.weight)
+        self.dropout_layer = nn.Dropout(dropout_prob)
         self.post_activation = post_activation
 
     def forward(self, x):
@@ -157,6 +161,7 @@ class Linear(nn.Module):
         """
         x = self.linear_layer(x)
         x = self.post_activation(x)
+        x = self.dropout_layer(x)
         return x    
 
 

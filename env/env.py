@@ -15,9 +15,9 @@ from env.pong import Pong
 
 class Env(ObservationWrapper):
     "This class creates the self.environement"
-    def __init__(self, max_steps, max_score):
-        self.env = gym.make('Pong-PLE-v0', MAX_SCORE = max_score, cpu_speed_ratio=0.1, players_speed_ratio = 0.5)#, display = True)
-        self.env = Pong(self.env, max_steps)
+    def __init__(self, max_steps, truncate, max_score, display=False):
+        self.env = gym.make('Pong-PLE-v0', MAX_SCORE = max_score, cpu_speed_ratio=0.5, players_speed_ratio = 0.5, display = display)
+        self.env = Pong(self.env, truncate, max_steps)
         #self.env = gym.wrappers.FrameStack(self.env, 4)
         #self.env = record_videos(self.env)
     

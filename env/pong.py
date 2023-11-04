@@ -3,12 +3,13 @@ import gym
 #sys.modules["gym"] = gymnasium
 
 class Pong(gym.Wrapper):
-    def __init__(self, env, max_steps):
+    def __init__(self, env, truncate, max_steps):
         super().__init__(env)
         self.max_steps = max_steps
         
         self.cummulative_avoid_region = 0
         self.cummulative_prefered_region = 0
+        self.truncate = truncate
         self.reset_arrays()
 
     def step(self, action):
@@ -18,8 +19,17 @@ class Pong(gym.Wrapper):
         elif reward == 6:
             reward = 1
         self.episode_step += 1
-        truncated = self.is_episode_done()
+        if self.truncate:
+            truncated = self.is_episode_done()
+        else:
+            truncated = False
         return observation, reward, self.done, truncated, info
+    
+    def change_truncate(self):
+        self.truncate = False
+        
+    def change_max_step(self, num_step=1000):
+        self.max_steps = num_step
     
     def reset(self):
         self.episode_step = 0
@@ -27,9 +37,6 @@ class Pong(gym.Wrapper):
         self.episode_avoid_region = 0
         reset = self.env.reset()
         return reset, {}
-    
-    def is_episode_complete(self):
-        return self.episode_step == self.max_steps
     
     def reset_arrays(self):
         self.cummulative_avoid_region = 0

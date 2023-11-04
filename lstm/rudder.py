@@ -38,9 +38,9 @@ class LSTM():
         self.config = lstm_config
         self.logger = logger
         self._init_network(lstm_config)
-        self.lstm_batch_size = self.config["LSTM"]["batch_size"]
-        self.return_scaling = self.config["LSTM"]["return_scaling"]
-        self.continuous_pred_factor = self.config["LSTM"]["continuous_pred_factor"]
+        self.lstm_batch_size = self.config["REWARD_LEARNING"]["batch_size"]
+        self.return_scaling = self.config["REWARD_LEARNING"]["return_scaling"]
+        self.continuous_pred_factor = self.config["REWARD_LEARNING"]["continuous_pred_factor"]
         self.dump_dir = dump_dir
         self.loss = torch.nn.BCEWithLogitsLoss(reduction='none')
         self.total_loss = 0
@@ -94,7 +94,7 @@ class LSTM():
         pred_g0 = torch.cat([torch.zeros_like(lstm_out[:, 0:1]), lstm_out], dim=1)[:, :-1]
         for batch in range(pred_g0.size(0)):
             last_time_step_difference = abs(pred_g0[batch,-1] - oracle_feedback[batch]).item()
-            quality = 1 - (last_time_step_difference/self.config["LSTM"]["mu"])*(1/(1-self.config["LSTM"]["epsilon"]))
+            quality = 1 - (last_time_step_difference/self.config["REWARD_LEARNING"]["mu"])*(1/(1-self.config["REWARD_LEARNING"]["epsilon"]))
             quality_list.append(quality)
         return quality_list
     
@@ -138,7 +138,7 @@ class LSTM():
     
     def calculate_main_loss(self, predicted_G0, returns, length):
         return_ = returns.unsqueeze(-1).repeat(1, predicted_G0.size(1))
-        if self.config["LSTM"]["is_feedback_binary"]:
+        if self.config["REWARD_LEARNING"]["is_feedback_binary"]:
             all_timestep_loss = sigmoid_focal_loss(predicted_G0, return_, gamma=5, reduction='none')
         else:
             all_timestep_loss = F.mse_loss(predicted_G0, return_, reduction = 'none')
@@ -147,7 +147,7 @@ class LSTM():
         return all_timestep_loss_indexed
     
     # def calculate_cnn_loss(self, predicted, target, length):
-    #     if self.config["LSTM"]["is_feedback_binary"]:
+    #     if self.config["REWARD_LEARNING"]["is_feedback_binary"]:
     #         all_timestep_loss = F.binary_cross_entropy(predicted_G0, return_, reduction = 'none')
     #     else:
     #         all_timestep_loss = F.mse_loss(predicted_G0, return_, reduction = 'none')
@@ -171,7 +171,7 @@ class LSTM():
             
         # B x L
         return_ = returns.unsqueeze(-1).repeat(1, predicted_G0.size(1))
-        if self.config["LSTM"]["is_feedback_binary"]:
+        if self.config["REWARD_LEARNING"]["is_feedback_binary"]:
             all_timestep_loss =sigmoid_focal_loss(predicted_G0, return_, gamma=5, reduction='none')
         else:
             all_timestep_loss = F.mse_loss(predicted_G0, return_, reduction = 'none')
@@ -192,7 +192,7 @@ class LSTM():
     def q_estimate_loss(self, q_values, q_estimate):
         q_values = q_values[:,3:,...]
         q_values_estimate = q_estimate[:,:-3,...]
-        if self.config["LSTM"]["is_feedback_binary"]:
+        if self.config["REWARD_LEARNING"]["is_feedback_binary"]:
             loss = sigmoid_focal_loss(q_values_estimate, q_values, gamma=5, reduction='mean')
         else:
             loss = F.mse_loss(q_values_estimate, q_values, reduction ='none')
@@ -354,28 +354,25 @@ class LSTM():
         loss.backward(retain_graph = retain_graph)
         clip_grad_norm_(model.parameters(), 0.50)
         optimizer.step()
-        
-             
+              
     # Trains the LSTM until -on average- the main loss is below 0.25.
     def train(self):
-        if self.config["LSTM"]['is_load_lstm']:
-            self.model.load_state_dict(torch.load(self.config["LSTM"]['lstm_model_dir'])['lstm_weight'])
-            print("[INFO] LSTM model loaded from ", self.config["LSTM"]['lstm_model_dir'])
+        if self.config["REWARD_LEARNING"]['is_load_lstm']:
+            self.model.load_state_dict(torch.load(self.config["REWARD_LEARNING"]['model_dir'])['lstm_weight'])
+            print("[INFO] LSTM model loaded from ", self.config["REWARD_LEARNING"]['model_dir'])
         else:
             lstm_update = 0
-            lstm_n_updates = self.config["LSTM"]["n_update"]
+            lstm_n_updates = 50000#self.config["REWARD_LEARNING"]["n_update"]
             pbar_lstm = tqdm(total=lstm_n_updates)
+            # Get samples from the lesson buffer and prepare them.
+            train_observations, train_action, rewards, train_len, indices = self.buffer.sample(self.config["REWARD_LEARNING"]["size"])
+            train_observations, train_action, rewards, train_len = snip_trajectories(train_observations, train_action, rewards, train_len)
+            train_observations = torch.tensor(train_observations).to(device)
+            train_action = torch.tensor(train_action).to(device)
+            rewards = torch.tensor(rewards).to(device)
+            train_len = torch.tensor(train_len).to(device)
+            state_encoding = train_observations
             while lstm_update < lstm_n_updates:
-                # Get samples from the lesson buffer and prepare them.
-                train_observations, train_action, rewards, train_len, indices = self.buffer.sample(self.config["LSTM"]["batch_size"])
-                
-                #train_observations = train_observations
-                train_observations = torch.tensor(train_observations).to(device)
-                train_action = torch.tensor(train_action).to(device)
-                rewards = torch.tensor(rewards).to(device)
-                train_len = torch.tensor(train_len).to(device)
-                state_encoding = train_observations
-
                 returns = torch.sum(rewards, 1, keepdim=True)
                 q_values, q_estimate, _ = self.model(state_encoding, train_action, train_len)
                 #Calculating loss
@@ -388,7 +385,7 @@ class LSTM():
                 #Updating the priorities
                 total_loss_trajectory_wise = main_loss + self.continuous_pred_factor*(q_estimate_loss + trajectory_end_loss)
                 total_loss_trajectory_wise = total_loss_trajectory_wise.detach().cpu().numpy()
-                self.buffer.do_post_update_works(indices, total_loss_trajectory_wise, lstm_update)
+                #self.buffer.do_post_update_works(indices, total_loss_trajectory_wise, lstm_update)
                 log_value = [lstm_update, main_loss]
                 write_log(self.logger, log_keys, log_value, None)
                 pbar_lstm.set_description("LSTM Loss {}".format(main_loss))

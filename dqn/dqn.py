@@ -22,8 +22,10 @@ from human_oracle.oracle import HumanOracle
 from reply_buffer.lstm_buffer_handler import LSTMBufferHandler
 from utils.utils import *
 from lstm.lstm_training_handler import LSTMTrainingHandler
+from preference_learning.training_handler import TrainingHandler
 from utils.plot_network_internals import PlotInternal
 from scipy.special import kl_div
+from env.env import Env
 
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -114,19 +116,20 @@ class DQNAgent(Agent):
             )
 
     def set_log_dictionary(self):
-        self.log_dict = ["Episode" , "DQN loss", "Avg loss", "Epsilon", "Score"]
+        self.log_dict = ["Episode" , "DQN loss", "Avg loss", "Epsilon", "Score", "Episode steps"]
         if self.args.mode == 'preference':
-            self.personalized_policy_log_dict = ["Personalized policy Episodes", "personalized policy Score", "Personlaised_policy_Cummulative_preferred_region", 
-                                                 "Personlaised_policy_episode_preferred_region", "DQN policy Score", "DQN_policy_Cummulative_preferred_region",
+            self.personalized_policy_log_dict = ["Personalized policy Episodes", "personalized policy Score", "Personalised_policy_Cummulative_preferred_region", 
+                                                 "Personalised_policy_episode_preferred_region", "DQN policy Score", "DQN_policy_Cummulative_preferred_region",
                                                  "DQN_policy_episode_preferred_region"]
         elif self.args.mode == 'avoid':
-            self.personalized_policy_log_dict = ["Personalized policy Episodes", "personalized policy Score", "Personlaised_policy_Cummulative_avoid_region", 
-                                                 "Personlaised_policy_episode_avoid_region", "DQN policy Score", "DQN_policy_Cummulative_avoid_region",
+            self.personalized_policy_log_dict = ["Personalized policy Episodes", "personalized policy Score", "Personalised_policy_Cummulative_avoid_region", 
+                                                 "Personalised_policy_episode_avoid_region", "DQN policy Score", "DQN_policy_Cummulative_avoid_region",
                                                  "DQN_policy_episode_avoid_region"]
         else:
-            self.personalized_policy_log_dict = ["Personalized policy Episodes", "personalized policy Score", "Personlaised_policy_Cummulative_preferred_region", "Personlaised_policy_Cummulative_avoid_region",
-                                                 "Personlaised_policy_episode_preferred_region", "Personlaised_policy_episode_avoid_region", 
-                                                 "DQN policy Score", "DQN_policy_Cummulative_preferred_region", "DQN_policy_Cummulative_avoid_region", "DQN_policy_episode_preferred_region", "DQN_policy_episode_avoid_region"]
+            self.personalized_policy_log_dict = ["Personalized policy Episodes", "personalized policy Score", "Personalised_policy_Cummulative_preferred_region", 
+                                                 "Personalised_policy_Cummulative_avoid_region", "Personlaised_policy_episode_preferred_region", 
+                                                 "Personalised_policy_episode_avoid_region", "DQN policy Score", "DQN_policy_Cummulative_preferred_region", 
+                                                 "DQN_policy_Cummulative_avoid_region", "DQN_policy_episode_preferred_region", "DQN_policy_episode_avoid_region"]
     
     def _init_network(self):
         """Initialize networks and optimizers."""
@@ -223,7 +226,7 @@ class DQNAgent(Agent):
                 action_tensor = torch.tensor(action_vec).to(device)
                 size = state_input.size(0)
                 state_encoding = state_input
-                selected_action_q_value, _, attn = self.lstm_model(state_encoding, action_tensor, torch.tensor([[size]]))
+                selected_action_q_value, _, attn = self.model(state_encoding, action_tensor, torch.tensor([[size]]))
                 selected_action_q_value = selected_action_q_value.detach().cpu().numpy()
                 safety_q_value.append(selected_action_q_value[0,-1,0])
 
@@ -257,18 +260,18 @@ class DQNAgent(Agent):
             #self.adjusted_episode_lstm_reward += adjusted_redistributed_reward[selected_action]
             sorted_safety_q_value = np.argsort(safety_q_value)
             #For debugging purpose only
-            if 18<state[0]<=20:
-                value = state[0]
-                print(None)
-            if 30<=state[0]<32:
-                value = state[0]
-                print(None)
-            if 8<=state[0]<=10:
-                value = state[0]
-                print(None)
-            if 38<=state[0]<=40:
-                value = state[0]
-                print(None)
+            # if 18<state[0]<=20:
+            #     value = state[0]
+            #     print(None)
+            # if 30<=state[0]<32:
+            #     value = state[0]
+            #     print(None)
+            # if 8<=state[0]<=10:
+            #     value = state[0]
+            #     print(None)
+            # if 38<=state[0]<=40:
+            #     value = state[0]
+            #     print(None)
         return selected_action, action_advised
     
     def get_combined_policy(self, lstm_prob, dqn_prob):
@@ -447,9 +450,9 @@ class DQNAgent(Agent):
             #time.sleep(0.05)
             #self.next_state = np.array(self.next_state._frames).flatten()
             done = terminated + truncated
-            self.oracle.update_counts(self.next_state)
+            feedback = self.oracle.get_feedback(self.next_state, self.args.mode)
             original_reward = reward
-            self.lstm_buffer.add_transitions(self.previous_state, action, 0., self.next_state, key_state)
+            self.lstm_buffer.add_transitions(self.previous_state, action, feedback, self.next_state, key_state)
             # Save the new transition
             transition = (self.previous_state, action, reward, self.next_state, done, info)
             self.previous_state = self.next_state
@@ -461,6 +464,10 @@ class DQNAgent(Agent):
                         loss = self.update_model()
                         losses.append(loss)  # for logging
             score += original_reward
+            if self.is_write_video:
+                frame = self.env.render(mode='rgb_array')
+                frame = to_grayscale(frame)
+                self.episode_frame_array.append(frame)
         # print("Score", score, "Step", self.episode_step)
         # time.sleep(1)
         return losses, self.episode_step, score, self.total_step
@@ -472,17 +479,9 @@ class DQNAgent(Agent):
             self.i_episode = i_episode
             start_time = time.time()
             losses, self.episode_step, score, self.total_step = self.run_episode(True)
-            #Get episode violations count (For logging)
-            #cummulative_lower_threshold, cummulative_upper_threshold, cumulative_perfect_drive, episode_lower_threshold, episode_upper_threshold, episode_perfect_drive = self.oracle.return_counts()
-            #Get the human feedback
-            feedback = self.oracle.get_human_feedback()
-            
-            #Remove the following
-            # cummulative_lower_threshold, cummulative_upper_threshold, cumulative_perfect_drive, episode_lower_threshold, episode_upper_threshold, episode_perfect_drive = 0,0,0,0,0,0
-            # feedback = 0
             
             #Adding the trajectory to the lstm_buffer
-            self.lstm_buffer.add_to_buffer(feedback)
+            self.lstm_buffer.add_to_buffer()
             #Reset the transition list
             self.lstm_buffer.reset_arrays()
             self.do_post_episode_update()
@@ -490,7 +489,7 @@ class DQNAgent(Agent):
                 avg_loss = np.vstack(losses).mean(axis=0)
                 log_value = (self.i_episode, 
                              avg_loss[0], avg_loss[1], 
-                             self.epsilon, score)
+                             self.epsilon, score, self.episode_step)
                 write_log(self.logger, self.log_dict, log_value, self.args.use_logger)
             if i_episode % self.args.save_freequency == 0:
                 params = {
@@ -504,49 +503,53 @@ class DQNAgent(Agent):
         pbar_dqn.close()    
                     
     def train(self):
-        self.oracle = HumanOracle(self.env, self.args.mode, self.args.hit_penalty)
+        print("[INFO] Dump dir: ", self.dump_dir)
+        self.oracle = HumanOracle(self.env, self.args.mode)
         self.plot_internals = PlotInternal()
         
-        if self.args.is_rudder:
-            #self.logger.save_config_wandb(config)
-            self.lstm_buffer = LSTMBufferHandler(self.lstm_config, self.args.max_steps)
-            self.lstmtraininghandler = LSTMTrainingHandler(self.lstm_config, self.lstm_buffer, self.network_cfg, self.dump_dir, self.logger)
+        self.lstm_buffer = LSTMBufferHandler(self.lstm_config, self.args.max_steps, self.args.iteration_num)
             
-        if self.args.load_data_dir is None:
+        if self.args.dqn_training:
             self.run_game()
-        else:
-            self.load_params(self.args.model_path, device)
-            self.lstm_buffer.fill_buffer_from_disk(self.args.load_data_dir)
-        
-        #Dump the trajectories
-        if not self.args.dump_dir is None:
+            #Dump the trajectories and model weights
             params = {
             "dqn_state_dict": self.dqn.state_dict(),
             "dqn_target_state_dict": self.dqn_target.state_dict(),
             "dqn_optim_state_dict": self.dqn_optim.state_dict(),
             }
             save_models(params, self.dump_dir, 'dqn_model')
-            self.lstm_buffer.dump_buffer_data(self.args.dump_dir)
-        
-        #Training the rudder with the data collected from human and DQN policy learning 
-        self.lstmtraininghandler.train_lstm()
+            self.lstm_buffer.dump_buffer_data(self.args.dump_dir, self.args.mode)
+        else:
+            self.load_params(self.args.model_path, device)
+            self.lstm_buffer.fill_buffer_from_disk(self.args.load_data_dir, self.args.mode)
+            
+    
         if not self.args.is_personalization:
+            #Closing the env
             self.env.close
             if self.args.use_logger:
                 self.logger.finish_run()
         else:
-            #Personalizing policy starts
+            if self.args.pref_model == 'LSTM':
+                self.traininghandler = LSTMTrainingHandler(self.lstm_config, self.lstm_buffer, self.dump_dir, self.logger)
+                print("[INFO] LSTM Preference training initiated")
+            else:
+                self.traininghandler = TrainingHandler(self.lstm_config, self.lstm_buffer, self.dump_dir, self.logger)
+                print("[INFO] PEBBLE Preference training initiated")
+            #Training the rudder with the data collected from human and DQN policy learning 
+            self.traininghandler.train()
             #Create directory to save videos
             self.video_save_dir = create_dump_directory(self.dump_dir + '/Advise_videos')
             #self.env.reset_arrays()
             self.lstm_buffer.reset_list(self.args.personalization_num_episode)
-            self.lstm_model = self.lstmtraininghandler.get_model()
-            #Dumping the LSTM model
-            checkpoint = {"lstm_weight" : self.lstm_model.state_dict()}
-            if self.lstm_config["LSTM"]["is_lstm"]:
-                path = self.dump_dir + '/lstm_{}.tar'.format(self.lstm_config["LSTM"]["n_units"])
+            self.model = self.traininghandler.get_model()
+            #Dumping the Reward model
+            if self.args.pref_model == "LSTM":
+                checkpoint = {"lstm_weight" : self.model.state_dict()}
+                path = self.dump_dir + '/lstm.tar'
             else:
-                path = self.dump_dir + '/transformer.tar'
+                checkpoint = {"pebble_weight" : self.model.state_dict()}
+                path = self.dump_dir + '/pebble.tar'
             torch.save(checkpoint, path)
             #We don't want to do exploration after DQN has trained
             self.epsilon = 0
@@ -555,7 +558,11 @@ class DQNAgent(Agent):
             #self.df = pd.DataFrame(columns=["state_cordinate", "dqn_action", "selected_action", "valid_actions", "lstm_prob", "dqn_prob", "combined_probability", "lstm_temperature", "dqn_temperature"])
             #Wrap the environment to save the test videos
             #self.env = record_videos(self.env, video_folder=self.dump_dir)
-            self.lstm_model.eval()
+            self.model.eval()
+            #Starting a new environment with infinite horizon
+            #self.env.change_truncate()
+            self.env.change_max_step()
+            
             self.is_write_video = True
             p_cummulative_prefered_region = 0
             p_cummulative_avoid_region = 0
@@ -564,6 +571,7 @@ class DQNAgent(Agent):
             save_path = self.dump_dir + '/DQN_Policy'
             os.makedirs(save_path)
             for episode in range(self.args.personalization_num_episode):
+                print("Episode: ", episode)
                 self.adjusted_episode_lstm_reward = []
                 #self.adjusted_episode_lstm_reward = 0
                 self.episode = episode
@@ -582,9 +590,13 @@ class DQNAgent(Agent):
                 elif self.args.mode == 'avoid':
                     _, p_episode_avoid_region = self.oracle.return_counts()
                     p_cummulative_avoid_region += p_episode_avoid_region
-                print("Running DQN policy")
+                # print("Episode steps p: ", self.episode_step)
+                # print("Score p: ", p_score)
+                # print("Running DQN policy")
                 _, _, d_score, _ = self.run_episode(False, False)
                 write_video(self.episode_frame_array, episode, save_path)
+                # print("Episode steps DQN: ", self.episode_step)
+                # print("Score DQN: ", d_score)
                 if self.args.mode == 'both':
                     _, _, d_episode_prefered_region, d_episode_avoid_region = self.oracle.return_counts()
                     d_cummulative_prefered_region += d_episode_prefered_region

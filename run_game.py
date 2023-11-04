@@ -26,31 +26,33 @@ def parse_args():
                         help="whether store the results in logger")
     parser.add_argument("--log", dest="log", action="store_true",
                         help="turn on logging")
-    parser.add_argument("--iteration_num", type=int, default= 500,
+    parser.add_argument("--iteration_num", type=int, default= 2000,
                         help="total iteration num")
-    parser.add_argument("--max_steps", type=int, default=50,
+    parser.add_argument("--max_steps", type=int, default=1000,
                         help="total steps in an episode")
-    parser.add_argument("--personalization_num_episode", type=int, default=50, #This is personalization number. Do not change this!!!!!!!!!!!!!!!! 
+    parser.add_argument("--personalization_num_episode", type=int, default=20, #This is personalization number. Do not change this!!!!!!!!!!!!!!!! 
                         help="Personalization algorithm num_episode")
-    parser.add_argument("--is_rudder", type=bool, default=True,
-                        help="Is rudder training parallely")
+    parser.add_argument("--dqn_training", type=bool, default=False,
+                        help="Whether DQN is training")
+    parser.add_argument("--pref_model", type=str, default='PEBBLE',
+                        help="Whether the preference model is LSTM/PEBBLE")
     parser.add_argument("--is_personalization", type=bool, default=True,
                         help="Is personalization of policy is applied")
     parser.add_argument("--lstm_config_path", type=str, default="lstm/lstm_cnn_config.yaml",
                         help="lstm config path")
-    parser.add_argument("--model_path", type=str, default="Result/2023-10-11_10-58-20_6RFVQ6/dqn_model_2000.tar",
+    parser.add_argument("--model_path", type=str, default="Result/DQN_model/dqn_model.tar",
                         help="Save model_path")
     parser.add_argument("--save_freequency", type=int, default= 1000,
                         help="Save freequency of the DQN model")
     parser.add_argument("--dump_dir", type=str, default= "Trajectory",
                         help="lstm config path")
-    parser.add_argument("--load_data_dir", type=str, default=None,
+    parser.add_argument("--load_data_dir", type=str, default="Trajectory",
                         help="lstm config path")
     parser.add_argument("--result_dump_dir", type=str, default="Result",
                         help="Dump the results of the redistribution")
     parser.add_argument("--policy_fusion", type=str, default='product',
                         help="Which policy fusion method, entropy_weighted/product/average/entropy_threshold")
-    parser.add_argument("--seed", type=int, default=888,
+    parser.add_argument("--seed", type=int, default=6666,
                         help="Seed")
     parser.add_argument("--max_score", type=int, default=1,
                         help="Maximum score")
@@ -58,21 +60,18 @@ def parse_args():
                         help="Number of action in the env")
     parser.add_argument("--mode", type=str, default='avoid',
                         help="preference/avoid/both")
-    parser.add_argument("--hit_penalty", type=int, default=0,
-                        help="Hit penality in human feedback")
     return parser.parse_args()
 
 def run_game():
     args = parse_args()
     
     dump_dir = create_dump_directory(args.result_dump_dir)
-    print("Dump dir: ", dump_dir)
     
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
     
-    env = Env(args.max_steps, args.max_score)
+    env = Env(args.max_steps, True, args.max_score)
     env = env.get_env()
     policy_args = args
     policy_log_cfg = Dict()
@@ -132,11 +131,14 @@ def run_game():
     
     def create_training_decsription():
         text = ''
-        text = text + '{}_epoch'.format(lstm_config["LSTM"]["n_update"])
-        text = text + '_{}_episodes'.format(lstm_config["LSTM"]["size"])
-        text = text + '_{}_layers'.format(lstm_config["LSTM"]["n_layers"])
+        text = text + "{}".format(args.pref_model)
+        text = text + '_{}_epoch'.format(lstm_config["REWARD_LEARNING"]["n_update"])
+        text = text + '_{}_Trajectories'.format(lstm_config["REWARD_LEARNING"]["size"])
+        if args.pref_model == 'LSTM':
+            text = text + '_{}_units'.format(lstm_config["REWARD_LEARNING"]["n_units"])
+        else:
+            text = text + '_{}_batch_size'.format(lstm_config["REWARD_LEARNING"]["batch_size"])
         text = text + "_{}".format(args.seed)
-        text += "_{}".format(args.max_score)
         text += '_{}'.format(policy_config["min_epsilon"])
         text = text + "_{}".format(args.mode)
         text = text + "_{}".format(args.policy_fusion)

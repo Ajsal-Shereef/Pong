@@ -29,10 +29,10 @@ class RRLSTM(nn.Module):
         self.config = config
         self.cnn_autoencoder = False
         #Pre_LSTM_Linear layer
-        #self.pre_linear_layer = Linear(self.config["LSTM"]["input_size"], self.config["LSTM"]["prelinear_embedding"])
+        #self.pre_linear_layer = Linear(self.config["REWARD_LEARNING"]["input_size"], self.config["REWARD_LEARNING"]["prelinear_embedding"])
         
         #Atenttion model
-        if not self.config["LSTM"]["is_lstm"]:
+        if not self.config["REWARD_LEARNING"]["is_lstm"]:
             self.attn_model = SelfAttentionForRL(observation_size = self.config["TRANSFORMER"]["observation_size"],
                                                  action_size = self.config["TRANSFORMER"]["action_size"],
                                                  device = device,
@@ -44,34 +44,34 @@ class RRLSTM(nn.Module):
         
         
         #Attention
-        #self.attention = Attention(self.config["LSTM"]["n_units"], self.config["LSTM"]["n_units"], self.config["LSTM"]["n_units"])
+        #self.attention = Attention(self.config["REWARD_LEARNING"]["n_units"], self.config["REWARD_LEARNING"]["n_units"], self.config["REWARD_LEARNING"]["n_units"])
         
         #Reduection_layer
         #self.embedding = nn.Linear(6400, 512)
         
         #Constructing the LSTM layer
-        in_channels = [self.config["LSTM"]["input_size"]] + [self.config["LSTM"]["n_units"]]*(self.config["LSTM"]["n_layers"]-1)
+        in_channels = [self.config["REWARD_LEARNING"]["input_size"]] + [self.config["REWARD_LEARNING"]["n_units"]]*(self.config["REWARD_LEARNING"]["n_layers"]-1)
         self.lstm_layers = nn.Sequential()
         for i, channels in enumerate(in_channels):
             lstm_layer = LSTM(fc_input_size = channels,
-                              n_units = self.config["LSTM"]["n_units"])
+                              n_units = self.config["REWARD_LEARNING"]["n_units"])
             self.lstm_layers.add_module("lstm_{}".format(i), lstm_layer)
-        #self.lstm_layers = nn.LSTM(self.config["LSTM"]["input_size"], self.config["LSTM"]["n_units"], 1, bidirectional = True)
+        #self.lstm_layers = nn.LSTM(self.config["REWARD_LEARNING"]["input_size"], self.config["REWARD_LEARNING"]["n_units"], 1, bidirectional = True)
         #LSTM_Linear layer
-        self.linear_layer = Linear(self.config["LSTM"]["n_units"]//2, 1)
+        self.linear_layer = Linear(self.config["REWARD_LEARNING"]["n_units"]//2, 1)
         
         #Auxilary task layer
-        self.aux_layer = Linear(self.config["LSTM"]["n_units"]//2, 1)
+        self.aux_layer = Linear(self.config["REWARD_LEARNING"]["n_units"]//2, 1)
                
         #Constructing attention layer
-        #self.attention = nn.Linear(self.config["LSTM"]["n_units"], 1)
+        #self.attention = nn.Linear(self.config["REWARD_LEARNING"]["n_units"], 1)
         
         #FiLM layer
-        self.film = FiLM(self.config["LSTM"]["action_embedding_dim"], self.config["LSTM"]["feature_size"])
+        self.film = FiLM(self.config["REWARD_LEARNING"]["action_embedding_dim"], self.config["REWARD_LEARNING"]["feature_size"])
         
         #Post LSTM linear layers
-        self.post_fc1 = Linear(self.config["LSTM"]["n_units"], self.config["LSTM"]["n_units"]//2)
-        self.post_fc2 = Linear(self.config["LSTM"]["n_units"], self.config["LSTM"]["n_units"]//2)
+        self.post_fc1 = Linear(self.config["REWARD_LEARNING"]["n_units"], self.config["REWARD_LEARNING"]["n_units"]//2)
+        self.post_fc2 = Linear(self.config["REWARD_LEARNING"]["n_units"], self.config["REWARD_LEARNING"]["n_units"]//2)
         
         #Sigmoid activation
         #self.sigmoid = nn.Sigmoid()
@@ -84,17 +84,17 @@ class RRLSTM(nn.Module):
         
         #Batch Normalization
         #self.bn1 = nn.BatchNorm1d(self.config["CNN"]["fc_output_size"])
-        #self.bn2 = nn.BatchNorm1d(self.config["LSTM"]["input_size"])
-        #self.bn3 = nn.BatchNorm1d(self.config["LSTM"]["n_units"])
+        #self.bn2 = nn.BatchNorm1d(self.config["REWARD_LEARNING"]["input_size"])
+        #self.bn3 = nn.BatchNorm1d(self.config["REWARD_LEARNING"]["n_units"])
         
         #Dropout layer
         #self.dropout = nn.Dropout(p=0.5)
         
         #Linear layer to reduce the dimension of the state
-        #self.reduction_layer = nn.Linear(self.config["CNN"]["fc_output_size"], self.config["LSTM"]["action_embedding_dim"])
+        #self.reduction_layer = nn.Linear(self.config["CNN"]["fc_output_size"], self.config["REWARD_LEARNING"]["action_embedding_dim"])
         
         #Action embedding layer
-        #self.action_embedding = nn.Linear(self.config["LSTM"]["n_actions"], self.config["LSTM"]["action_embedding_dim"])
+        #self.action_embedding = nn.Linear(self.config["REWARD_LEARNING"]["n_actions"], self.config["REWARD_LEARNING"]["action_embedding_dim"])
         
         # #Constructing the CNN encoder
         # self.cnn_encoder = CNNEncode(self.config["CNN"]["input_channels"], self.config["CNN"]["kernel_sizes"], self.config["CNN"]["strides"])
@@ -107,7 +107,7 @@ class RRLSTM(nn.Module):
         
     
         #Constructing the action embedding layer
-        #self.embedding = nn.Embedding(self.config["LSTM"]["n_actions"], self.config["LSTM"]["action_embedding_dim"])
+        #self.embedding = nn.Embedding(self.config["REWARD_LEARNING"]["n_actions"], self.config["REWARD_LEARNING"]["action_embedding_dim"])
         
         #Conv layer
         # self.cnn_layer = CNNLayer(input_channels = 10,
@@ -123,7 +123,7 @@ class RRLSTM(nn.Module):
         # self.cnn = CNN([self.cnn_layer], None)
         
         #Aux Linear layer
-        #self.aux_linear = Linear(self.config["LSTM"]["n_units"], 1)
+        #self.aux_linear = Linear(self.config["REWARD_LEARNING"]["n_units"], 1)
         
         #Constructing MLP models
         # self.mlp = MLP(input_size = 170,
@@ -185,9 +185,9 @@ class RRLSTM(nn.Module):
         #states = self.dropout(states)
         #states_embedded = self.reduction_layer(states)
         #states_embedded = states_embedded.view(b,t,-1)
-        action_one_hot = custom_action_encoding(action, self.config["LSTM"]["n_actions"], self.config["LSTM"]["action_embedding_dim"])
+        action_one_hot = custom_action_encoding(action, self.config["REWARD_LEARNING"]["n_actions"], self.config["REWARD_LEARNING"]["action_embedding_dim"])
         action_one_hot = torch.tensor(action_one_hot).to(device)
-        if self.config["LSTM"]["is_FiLM"]:
+        if self.config["REWARD_LEARNING"]["is_FiLM"]:
             lstm_input = self.film(action_one_hot, states)
         else:
             lstm_input = torch.cat((states, action_one_hot), dim=-1)
@@ -197,7 +197,7 @@ class RRLSTM(nn.Module):
         #lstm_input = torch.relu(lstm_input)
         #lstm_input = self.dropout(lstm_input)
         #lstm_input = lstm_input.view(b,t,-1)
-        if self.config["LSTM"]["is_lstm"]:
+        if self.config["REWARD_LEARNING"]["is_lstm"]:
             lstm_output = self.lstm_layers(lstm_input)
             attn = None
         else:
@@ -224,9 +224,9 @@ class RRLSTM(nn.Module):
         
 
 class LessonBuffer:
-    def __init__(self, config, max_time, is_oned_walk = False):
+    def __init__(self, config, max_time, size):
         self.config = config
-        self.size = self.config["size"]
+        self.size = size
         self.feature_size = self.config["feature_size"]
         self.max_time = max_time
         # Initializing the lsit to store the transitions
@@ -250,7 +250,7 @@ class LessonBuffer:
         self.sample_weight = np.full((size,), 1/self.size, dtype=np.float32)
         self.sample_priorities = np.full((size,), 100.0, dtype=np.float32)
         
-    def dump_buffer_data(self, dump_dir):
+    def dump_buffer_data(self, dump_dir, mode):
         if  dump_dir != None:
             # if is_random_policy:
             #     np.save(path + '/random/states_buffer', self.states_buffer, allow_pickle=True)
@@ -258,14 +258,26 @@ class LessonBuffer:
             #     np.save(path + '/random/lens_buffer', self.lens_buffer, allow_pickle=True)
             #     np.save(path + '/random/rewards_buffer', self.rewards_buffer, allow_pickle=True)
             # else:
+            if mode == 'both':
+                dump_dir += '/both'
+            elif mode == 'avoid':
+                dump_dir += '/avoid'
+            else:
+                dump_dir += '/preference'
             np.save(dump_dir + '/states_buffer', self.states_buffer, allow_pickle=True)
             np.save(dump_dir + '/actions_buffer', self.actions_buffer, allow_pickle=True)
             np.save(dump_dir + '/lens_buffer', self.lens_buffer, allow_pickle=True)
             np.save(dump_dir + '/rewards_buffer', self.rewards_buffer, allow_pickle=True)
         print("[INFO] DQN Training data saved to ", dump_dir)
                 
-    def fill_buffer_from_disk(self, load_dir):
+    def fill_buffer_from_disk(self, load_dir, mode):
         data = os.listdir(load_dir)
+        if mode == 'both':
+            load_dir += '/both'
+        elif mode == 'avoid':
+            load_dir += '/avoid'
+        else:
+            load_dir += '/preference'
         if len(data)==0:
             raise ValueError("The directory is None")
         else:
@@ -325,7 +337,8 @@ class LessonBuffer:
         self.states_buffer[self.next_ind, traj_length:] = 0
         self.actions_buffer[self.next_ind, :traj_length] = actions
         self.actions_buffer[self.next_ind, traj_length:] = 0
-        self.rewards_buffer[self.next_ind, -1] = rewards[-1]
+        self.rewards_buffer[self.next_ind, :traj_length] = rewards
+        self.rewards_buffer[self.next_ind, traj_length:] = 0
         self.lens_buffer[self.next_ind] = traj_length
         
     # def calculate_prob_list(self):

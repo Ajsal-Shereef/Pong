@@ -6,11 +6,11 @@ from utils.utils import to_one_hot, flatten_state, dump_list, standardize
 
 class LSTMBufferHandler():
     """This class handles the LSTM reply buffer"""
-    def __init__(self, config, max_time, is_oned_walks = False):                            
+    def __init__(self, config, max_time, size):                            
         self.reset_arrays()
         self.max_time = max_time
-        self.config = config["LSTM"]
-        self.lstm_reply_buffer = LessonBuffer(self.config, self.max_time, is_oned_walks)
+        self.config = config["REWARD_LEARNING"]
+        self.lstm_reply_buffer = LessonBuffer(self.config, self.max_time, size)
         self.mean_feedback = 0
         if self.config["save_trajectory"]:
             self.good_traj = []
@@ -47,11 +47,11 @@ class LSTMBufferHandler():
     def reset_list(self, size):
         self.lstm_reply_buffer.reset_list(size)
         
-    def dump_buffer_data(self, dump_dir):
-        self.lstm_reply_buffer.dump_buffer_data(dump_dir)
+    def dump_buffer_data(self, dump_dir, mode):
+        self.lstm_reply_buffer.dump_buffer_data(dump_dir, mode)
         
-    def fill_buffer_from_disk(self, dump_dir):
-        self.lstm_reply_buffer.fill_buffer_from_disk(dump_dir)
+    def fill_buffer_from_disk(self, dump_dir, mode):
+        self.lstm_reply_buffer.fill_buffer_from_disk(dump_dir, mode)
         
     def get_trajectory_score(self, lstm_loss, oracle_feedback):
         return self.lstm_reply_buffer.get_trajectory_score(lstm_loss, oracle_feedback)
@@ -59,11 +59,10 @@ class LSTMBufferHandler():
     def get_is_buffer_is_full(self):
         self.is_reply_buffer_is_full = self.lstm_reply_buffer.get_buffer_is_full()
     
-    def add_to_buffer(self, feedback):
+    def add_to_buffer(self):
         states = np.stack(self.previous_states)
         actions = np.array(self.actions)
         rewards = np.array(self.rewards)
-        rewards[-1] = feedback
         self.lstm_reply_buffer.add(states=states, actions=actions, rewards=rewards)
                  
     def add_to_buffer_from_list(self, list, feedback):

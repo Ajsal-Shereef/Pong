@@ -7,8 +7,8 @@ import torchinfo
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class LSTMTrainingHandler():
-    def __init__(self, config_file, lstm_buffer, network_cfg, dump_dir, logger):
-        self.config = config_file["LSTM"]
+    def __init__(self, config_file, lstm_buffer, dump_dir, logger):
+        self.config = config_file["REWARD_LEARNING"]
         self.lstm_buffer = lstm_buffer.lstm_reply_buffer
         self.is_lstm_hiccup_completed = False
         self.n_lstm_update = 0
@@ -35,7 +35,7 @@ class LSTMTrainingHandler():
     def is_lstm_training_started(self):
         return self.model.is_lstm_training_started()
         
-    def train_lstm(self):
+    def train(self):
         self.model.train()
         
     def get_onedwalk_prediction(self, states, action, rewards):
