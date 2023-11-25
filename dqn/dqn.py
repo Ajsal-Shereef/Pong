@@ -58,7 +58,7 @@ class DQNAgent(Agent):
         use_n_step (bool): whether or not to use n-step returns
     """
 
-    def __init__(self, env, args, log_cfg, hyper_params, network_cfg, optim_cfg, dump_dir, lstm_config, logger):
+    def __init__(self, env, args, log_cfg, hyper_params, network_cfg, optim_cfg, dump_dir, lstm_config, dqn_model_path, logger):
         """Initialize."""
         Agent.__init__(self, env, args, log_cfg)
 
@@ -83,8 +83,9 @@ class DQNAgent(Agent):
         self._initialize()
         self._init_network()
         self.reset_frame_array()
-        self.set_log_dictionary()
+        self.set_dqn_log_dictionary()
         self.is_write_video = False
+        self.dqn_path = dqn_model_path
         
         #summary(self.dqn_target.cuda(), (1,74,74))
 
@@ -115,32 +116,64 @@ class DQNAgent(Agent):
                 gamma=self.hyper_params.gamma,
             )
 
-    def set_log_dictionary(self):
-        self.log_dict = ["Episode" , "DQN loss", "Avg loss", "Epsilon", "Score", "Episode steps"]
+    # def set_log_dictionary(self):
+    #     self.log_dict = ["Episode" , "DQN loss", "Avg loss", "Epsilon", "Score", "Episode steps"]
+    #     if self.args.mode == 'preference':
+    #         self.personalized_policy_log_dict = ["Personalized policy Episodes", "personalized policy Score", "Personalised_policy_Cummulative_preferred_region", 
+    #                                              "Personalised_policy_episode_preferred_region", "DQN policy Score", "DQN_policy_Cummulative_preferred_region",
+    #                                              "DQN_policy_episode_preferred_region"]
+    #     elif self.args.mode == 'avoid':
+    #         self.personalized_policy_log_dict = ["Personalized policy Episodes", "personalized policy Score", "Personalised_policy_Cummulative_avoid_region", 
+    #                                              "Personalised_policy_episode_avoid_region", "DQN policy Score", "DQN_policy_Cummulative_avoid_region",
+    #                                              "DQN_policy_episode_avoid_region"]
+    #     else:
+    #         self.personalized_policy_log_dict = ["Personalized policy Episodes", "personalized policy Score", "Personalised_policy_Cummulative_preferred_region", 
+    #                                              "Personalised_policy_Cummulative_avoid_region", "Personlaised_policy_episode_preferred_region", 
+    #                                              "Personalised_policy_episode_avoid_region", "DQN policy Score", "DQN_policy_Cummulative_preferred_region", 
+    #                                              "DQN_policy_Cummulative_avoid_region", "DQN_policy_episode_preferred_region", "DQN_policy_episode_avoid_region"]
+            
+    def set_dqn_log_dictionary(self):
+        self.log_dict = ["Episode" , "DQN loss", "Avg Q value", "Epsilon", "Score", "Episode step"]
+        
+    def set_personalization_log_dictionary(self, fusion, eta):
         if self.args.mode == 'preference':
-            self.personalized_policy_log_dict = ["Personalized policy Episodes", "personalized policy Score", "Personalised_policy_Cummulative_preferred_region", 
-                                                 "Personalised_policy_episode_preferred_region", "DQN policy Score", "DQN_policy_Cummulative_preferred_region",
-                                                 "DQN_policy_episode_preferred_region"]
+            personalized_policy_log_dict = ["{} {} Score".format(fusion, eta), "{} {} Cummulative_prefered_region".format(fusion, eta), 
+                                            "{} {} episode_prefered_region".format(fusion, eta)]
+            return personalized_policy_log_dict
         elif self.args.mode == 'avoid':
-            self.personalized_policy_log_dict = ["Personalized policy Episodes", "personalized policy Score", "Personalised_policy_Cummulative_avoid_region", 
-                                                 "Personalised_policy_episode_avoid_region", "DQN policy Score", "DQN_policy_Cummulative_avoid_region",
-                                                 "DQN_policy_episode_avoid_region"]
+            personalized_policy_log_dict = ["{} {} Score".format(fusion, eta), "{} {} Cummulative_avoid_region".format(fusion, eta), 
+                                            "{} {} episode_avoid_region".format(fusion, eta)]
+            return personalized_policy_log_dict
         else:
-            self.personalized_policy_log_dict = ["Personalized policy Episodes", "personalized policy Score", "Personalised_policy_Cummulative_preferred_region", 
-                                                 "Personalised_policy_Cummulative_avoid_region", "Personlaised_policy_episode_preferred_region", 
-                                                 "Personalised_policy_episode_avoid_region", "DQN policy Score", "DQN_policy_Cummulative_preferred_region", 
-                                                 "DQN_policy_Cummulative_avoid_region", "DQN_policy_episode_preferred_region", "DQN_policy_episode_avoid_region"]
+            personalized_policy_log_dict = ["{} {} Score".format(fusion, eta), "{} {} Cummulative_prefered_region".format(fusion, eta),
+                                            "{} {} Cummulative_avoid_region".format(fusion, eta), "{} {} episode_prefereed_region".format(fusion, eta), 
+                                            "{} {} episode_avoid_region".format(fusion, eta)]
+            return personalized_policy_log_dict
+            
+    def set_task_policy_log_dictinary(self):
+        if self.args.mode == 'preference':
+            task_policy_log_dic = ["DQN policy Score", "DQN_policy_prefered_region", "DQN_policy_episode_prefered_region"]
+            return task_policy_log_dic
+        elif self.args.mode == 'avoid':
+            task_policy_log_dic = [ "DQN policy Score", "DQN_policy_Cummulative_avoid_region", "DQN_policy_episode_avoid_region"]
+            return task_policy_log_dic
+        else:
+            task_policy_log_dic = ["DQN policy Score", "DQN_policy_Cummulative_prefered_region", "DQN_policy_Cummulative_avoid_region", 
+                                   "DQN_policy_episode_prefered_region", "DQN_policy_episode_avoid_region"]
+            return task_policy_log_dic
     
     def _init_network(self):
         """Initialize networks and optimizers."""
         self.dqn = MLP(input_size=self.network_cfg.fc_input_size,
                        output_size=self.args.num_action,
-                       hidden_sizes = [256,512,512]).to(device)
+                       hidden_sizes = [256,512,512],
+                       dropout_prob = 0.4).to(device)
         # if torch.cuda.device_count() > 1:
         #     self.dqn = torch.nn.DataParallel(self.dqn)
         self.dqn_target = MLP(input_size=self.network_cfg.fc_input_size,
                               output_size=self.args.num_action,
-                              hidden_sizes = [256,512,512]).to(device)
+                              hidden_sizes = [256,512,512],
+                              dropout_prob = 0.4).to(device)
         # if torch.cuda.device_count() > 1:
         #     self.dqn_target = torch.nn.DataParallel(self.dqn_target)
         
@@ -182,7 +215,10 @@ class DQNAgent(Agent):
             self.load_params(self.args.load_from)
             
     def choose_random_action(self, weight=None):
-        return self.env.action_space.sample()
+        if self.args.num_action == 3:
+            return np.random.choice([0,1,2])
+        else:
+            return np.random.choice([0,1])
     
     def reset_frame_array(self):
         self.frame_array = []
@@ -235,20 +271,20 @@ class DQNAgent(Agent):
                 self.previous_q_value = 0
             safety_q_value_diff = safety_q_value - self.previous_q_value
             #adjusted_redistributed_reward = safety_q_value_diff - np.sort(safety_q_value_diff)[1]
-            adjusted_redistributed_reward = safety_q_value_diff - min(safety_q_value_diff)
+            adjusted_redistributed_reward = safety_q_value_diff - np.mean(safety_q_value_diff)
             #Discount factor is set at 0.9
-            episoding_discounted_return = calculate_discounted_reward(self.adjusted_episode_lstm_reward, 0.9)
-            lstm_temperature = max(0.3, self.get_lstm_temperature(episoding_discounted_return))
+            episoding_discounted_return = calculate_discounted_reward(self.adjusted_episode_lstm_reward, 1.0)
+            lstm_temperature = max(0.3, self.get_lstm_temperature(episoding_discounted_return, self.crt))
             #lstm_temperature = 10
             #lstm_temperature = max(0.1, self.get_lstm_temperature(episoding_discounted_return))
             #lstm_temperature = 0.1
             lstm_std = np.std(safety_q_value_diff)
-            lstm_prob = softmax_temperature(safety_q_value_diff, lstm_temperature)
+            lstm_prob = softmax_temperature(safety_q_value, lstm_temperature)
             #dqn_temperature = max(0.02, (1-lstm_temperature))
-            dqn_temperature = 0.6
+            dqn_temperature = self.args.dqn_temp
             #policy_dqn_output[valid_actions[np.argmin(safety_q_value_diff[valid_actions])]] = min(policy_dqn_output)
             dqn_prob = softmax_temperature(policy_dqn_output, dqn_temperature)
-            combined_probability = self.get_combined_policy(lstm_prob, dqn_prob)
+            combined_probability = self.get_combined_policy(lstm_prob, dqn_prob, self.fusion)
             dqn_action = selected_action
             #Selecting the action from the fused policy
             #selected_action = np.random.choice(valid_actions, p=combined_probability)
@@ -260,33 +296,29 @@ class DQNAgent(Agent):
             #self.adjusted_episode_lstm_reward += adjusted_redistributed_reward[selected_action]
             sorted_safety_q_value = np.argsort(safety_q_value)
             #For debugging purpose only
-            # if 18<state[0]<=20:
-            #     value = state[0]
-            #     print(None)
-            # if 30<=state[0]<32:
-            #     value = state[0]
-            #     print(None)
-            # if 8<=state[0]<=10:
-            #     value = state[0]
-            #     print(None)
-            # if 38<=state[0]<=40:
-            #     value = state[0]
-            #     print(None)
+            if 14<state[0]<=16:
+                value = state[0]
+            if 32<=state[0]<34:
+                value = state[0]
+            if 8<=state[0]<=10:
+                value = state[0]
+            if 38<=state[0]<=40:
+                value = state[0]
         return selected_action, action_advised
     
-    def get_combined_policy(self, lstm_prob, dqn_prob):
-        if self.args.policy_fusion == 'product':
+    def get_combined_policy(self, lstm_prob, dqn_prob, policy_fusion):
+        if policy_fusion == 'product':
             product = np.multiply(lstm_prob, dqn_prob)
             return product/product.sum()
-        elif self.args.policy_fusion == 'entropy_weighted':
+        elif policy_fusion == 'entropy_weighted':
             lstm_entropy  = entropy(lstm_prob)
             dqn_entropy  = entropy(dqn_prob)
             entropy_sum = lstm_entropy + dqn_entropy
             min_entropy = min(lstm_entropy/entropy_sum, dqn_entropy/entropy_sum)
             return min_entropy*dqn_prob + (1-min_entropy)*lstm_prob
-        elif self.args.policy_fusion == 'average':
+        elif policy_fusion == 'average':
             return (lstm_prob + dqn_prob)/2
-        elif self.args.policy_fusion == 'entropy_threshold':
+        elif policy_fusion == 'entropy_threshold':
             lstm_entropy  = entropy(lstm_prob)
             dqn_entropy  = entropy(dqn_prob)
             if lstm_entropy < dqn_entropy:
@@ -304,8 +336,11 @@ class DQNAgent(Agent):
         else:
             raise NotImplementedError ("Choose either product/entropy_weighted policy fusion method")
     
-    def get_lstm_temperature(self, adjusted_episode_lstm_reward):    
-        return 7/(1 + np.exp(-10*(adjusted_episode_lstm_reward-0)))
+    def get_lstm_temperature(self, adjusted_episode_lstm_reward, crt):
+        if crt == -1:
+             return 0.3
+        else:
+            return self.args.t_max/(1 + np.exp(-2*(adjusted_episode_lstm_reward-crt)))
     
     def step(self, action):
         """Take an action and return the response of the env."""
@@ -443,6 +478,8 @@ class DQNAgent(Agent):
         self.episode_frame_array = []
         self.oracle.reset_episode_count()
         while not done:
+            frame = self.env.render(mode='rgb_array')
+            #cv2.imwrite("frame.png", frame)
             self.total_step += 1
             self.episode_step += 1
             action, _ = self.select_action(self.previous_state, is_personalization)
@@ -467,6 +504,12 @@ class DQNAgent(Agent):
             if self.is_write_video:
                 frame = self.env.render(mode='rgb_array')
                 frame = to_grayscale(frame)
+                # frame = cv2.putText(img=frame, text='{},{},{},{}.{}'.format(np.round(self.previous_state[0],1), action, 
+                #                                                          np.round(self.previous_state[1],1),
+                #                                                          np.round(self.next_state[0],1), 
+                #                                                          np.round(self.next_state[1],1)), 
+                #                 org=(0, 35), fontFace=cv2.FONT_HERSHEY_TRIPLEX, 
+                #                 fontScale=0.25, color=(50, 50, 50),thickness=1)
                 self.episode_frame_array.append(frame)
         # print("Score", score, "Step", self.episode_step)
         # time.sleep(1)
@@ -485,6 +528,7 @@ class DQNAgent(Agent):
             #Reset the transition list
             self.lstm_buffer.reset_arrays()
             self.do_post_episode_update()
+            
             if losses:
                 avg_loss = np.vstack(losses).mean(axis=0)
                 log_value = (self.i_episode, 
@@ -518,9 +562,17 @@ class DQNAgent(Agent):
             "dqn_optim_state_dict": self.dqn_optim.state_dict(),
             }
             save_models(params, self.dump_dir, 'dqn_model')
+            if self.args.num_action == 2:
+                self.args.dump_dir = self.args.dump_dir + '/2'
+            else:
+                self.args.dump_dir = self.args.dump_dir + '/3'
             self.lstm_buffer.dump_buffer_data(self.args.dump_dir, self.args.mode)
         else:
-            self.load_params(self.args.model_path, device)
+            self.load_params(self.dqn_path, device)
+            if self.args.num_action == 2:
+                self.args.load_data_dir = self.args.load_data_dir + '/2'
+            else:
+                self.args.load_data_dir = self.args.load_data_dir + '/3'
             self.lstm_buffer.fill_buffer_from_disk(self.args.load_data_dir, self.args.mode)
             
     
@@ -562,60 +614,155 @@ class DQNAgent(Agent):
             #Starting a new environment with infinite horizon
             #self.env.change_truncate()
             self.env.change_max_step()
-            
             self.is_write_video = True
-            p_cummulative_prefered_region = 0
-            p_cummulative_avoid_region = 0
-            d_cummulative_prefered_region = 0
-            d_cummulative_avoid_region =0
+            
+            # p_cummulative_prefered_region = 0
+            # p_cummulative_avoid_region = 0
+            # d_cummulative_prefered_region = 0
+            # d_cummulative_avoid_region =0
+            # save_path = self.dump_dir + '/DQN_Policy'
+            # os.makedirs(save_path)
+            # for episode in range(self.args.personalization_num_episode):
+            #     print("Episode: ", episode)
+            #     self.adjusted_episode_lstm_reward = []
+            #     #self.adjusted_episode_lstm_reward = 0
+            #     self.episode = episode
+            #     # print("Running personalised policy")
+            #     _, p_total_steps, p_score, _ = self.run_episode(False, True)
+            #     write_video(self.episode_frame_array, episode, self.video_save_dir)
+            #     self.lstm_buffer.reset_arrays()
+            #     #Get episode violations count (For logging)
+            #     if self.args.mode == 'both':
+            #         _, _, p_episode_prefered_region, p_episode_avoid_region = self.oracle.return_counts()
+            #         p_cummulative_prefered_region += p_episode_prefered_region/p_total_steps
+            #         p_cummulative_avoid_region += p_episode_avoid_region/p_total_steps
+            #     elif self.args.mode == 'preference':
+            #         _, p_episode_prefered_region = self.oracle.return_counts()
+            #         p_cummulative_prefered_region += p_episode_prefered_region/p_total_steps
+            #     elif self.args.mode == 'avoid':
+            #         _, p_episode_avoid_region = self.oracle.return_counts()
+            #         p_cummulative_avoid_region += p_episode_avoid_region/p_total_steps
+            #     # print("Episode steps p: ", self.episode_step)
+            #     # print("Score p: ", p_score)
+            #     # print("Running DQN policy")
+            #     _, d_total_steps, d_score, _ = self.run_episode(False, False)
+            #     write_video(self.episode_frame_array, episode, save_path)
+            #     # print("Episode steps DQN: ", self.episode_step)
+            #     # print("Score DQN: ", d_score)
+            #     if self.args.mode == 'both':
+            #         _, _, d_episode_prefered_region, d_episode_avoid_region = self.oracle.return_counts()
+            #         d_cummulative_prefered_region += d_episode_prefered_region/d_total_steps
+            #         d_cummulative_avoid_region += d_episode_avoid_region/d_total_steps
+            #     elif self.args.mode == 'preference':
+            #         _, d_episode_prefered_region = self.oracle.return_counts()
+            #         d_cummulative_prefered_region += d_episode_prefered_region/d_total_steps
+            #     elif self.args.mode == 'avoid':
+            #         _, d_episode_avoid_region = self.oracle.return_counts()
+            #         d_cummulative_avoid_region += d_episode_avoid_region/d_total_steps
+            #     if self.args.mode == 'preference':
+            #         new_log_value = (episode, p_score, p_cummulative_prefered_region, p_episode_prefered_region, d_score, d_cummulative_prefered_region, d_episode_prefered_region)
+            #     elif self.args.mode == 'avoid':
+            #         new_log_value = (episode, p_score, p_cummulative_avoid_region, p_episode_avoid_region, d_score, d_cummulative_avoid_region, d_episode_avoid_region)
+            #     elif self.args.mode == 'both':
+            #         new_log_value = (episode, p_score, p_cummulative_prefered_region, p_cummulative_avoid_region, p_episode_prefered_region, p_episode_avoid_region, d_score, 
+            #                          d_cummulative_prefered_region, d_cummulative_avoid_region, d_episode_prefered_region, d_episode_avoid_region)
+            #     write_log(self.logger, self.personalized_policy_log_dict, new_log_value, self.args.use_logger)
             save_path = self.dump_dir + '/DQN_Policy'
             os.makedirs(save_path)
+            for fusion in ["product"]:#, "entropy_weighted", "average", "entropy_threshold"]:
+                for eta in self.args.crt:
+                    globals()["p_cummulative_prefered_region_{}_{}".format(fusion, eta)] = 0
+                    globals()["p_cummulative_avoid_region_{}_{}".format(fusion, eta)] = 0
+                    globals()["p_cummulative_total_step_{}_{}".format(fusion, eta)] = 0
+                    # #Create directory to save videos
+                    create_dump_directory(self.dump_dir + '/Advise_videos/{}_{}'.format(fusion, eta))
+            d_cummulative_prefered_region = 0
+            d_cummulative_avoid_region = 0
+            d_total_episode_step = 0
             for episode in range(self.args.personalization_num_episode):
                 print("Episode: ", episode)
-                self.adjusted_episode_lstm_reward = []
-                #self.adjusted_episode_lstm_reward = 0
                 self.episode = episode
-                # print("Running personalised policy")
-                _, _, p_score, _ = self.run_episode(False, True)
-                write_video(self.episode_frame_array, episode, self.video_save_dir)
-                self.lstm_buffer.reset_arrays()
-                #Get episode violations count (For logging)
-                if self.args.mode == 'both':
-                    _, _, p_episode_prefered_region, p_episode_avoid_region = self.oracle.return_counts()
-                    p_cummulative_prefered_region += p_episode_prefered_region
-                    p_cummulative_avoid_region += p_episode_avoid_region
-                elif self.args.mode == 'preference':
-                    _, p_episode_prefered_region = self.oracle.return_counts()
-                    p_cummulative_prefered_region += p_episode_prefered_region
-                elif self.args.mode == 'avoid':
-                    _, p_episode_avoid_region = self.oracle.return_counts()
-                    p_cummulative_avoid_region += p_episode_avoid_region
-                # print("Episode steps p: ", self.episode_step)
-                # print("Score p: ", p_score)
-                # print("Running DQN policy")
-                _, _, d_score, _ = self.run_episode(False, False)
+                personalization_log_dictionary_keys = ["Personalised policy Episodes"]
+                personalization_log_dictionary_values = [episode]
+                for fusion in ["product"]:#, "average", "entropy_threshold", "entropy_weighted"]:
+                    for eta in self.args.crt:
+                        dict_keys = self.set_personalization_log_dictionary(fusion, eta)
+                        personalization_log_dictionary_keys = personalization_log_dictionary_keys + dict_keys
+                        self.fusion = fusion
+                        self.crt = eta
+                        self.adjusted_episode_lstm_reward = []
+                        #self.adjusted_episode_lstm_reward = 0
+                        # print("Running personalised policy")
+                        _, p_step, p_score, _ = self.run_episode(False, True)
+                        video_write_dir = self.dump_dir + '/Advise_videos/{}_{}'.format(fusion, eta)
+                        write_video(self.episode_frame_array, episode, video_write_dir)
+                        #self.lstm_buffer.reset_arrays()
+                        #Get episode violations count (For logging)
+                        
+                        if self.args.mode == 'both':
+                            _, _, p_episode_prefered_region, p_episode_avoid_region = self.oracle.return_counts()
+                            globals()["p_cummulative_prefered_region_{}_{}".format(fusion, eta)] += p_episode_prefered_region
+                            globals()["p_cummulative_avoid_region_{}_{}".format(fusion, eta)] += p_episode_avoid_region
+                            globals()["p_cummulative_total_step_{}_{}".format(fusion, eta)] += p_step
+                            p_policy_log_value = [p_score, globals()["p_cummulative_prefered_region_{}_{}".format(fusion, eta)], 
+                                                  globals()["p_cummulative_avoid_region_{}_{}".format(fusion, eta)], 
+                                                  p_episode_prefered_region, p_episode_avoid_region]
+                            personalization_log_dictionary_values = personalization_log_dictionary_values + p_policy_log_value
+                        elif self.args.mode == 'preference':
+                            _, p_episode_prefered_region = self.oracle.return_counts()
+                            globals()["p_cummulative_prefered_region_{}_{}".format(fusion, eta)] += p_episode_prefered_region
+                            globals()["p_cummulative_total_step_{}_{}".format(fusion, eta)] += p_step
+                            p_policy_log_value = [p_score, globals()["p_cummulative_prefered_region_{}_{}".format(fusion, eta)], 
+                                                  p_episode_prefered_region]
+                            personalization_log_dictionary_values = personalization_log_dictionary_values + p_policy_log_value
+                        elif self.args.mode == 'avoid':
+                            _, p_episode_avoid_region = self.oracle.return_counts()
+                            globals()["p_cummulative_avoid_region_{}_{}".format(fusion, eta)] += p_episode_avoid_region
+                            globals()["p_cummulative_total_step_{}_{}".format(fusion, eta)] += p_step
+                            p_policy_log_value = [p_score, globals()["p_cummulative_avoid_region_{}_{}".format(fusion, eta)], 
+                                                  p_episode_avoid_region]
+                            personalization_log_dictionary_values = personalization_log_dictionary_values + p_policy_log_value
+                #print("Running DQN policy")
+                task_policy_log_dic = self.set_task_policy_log_dictinary()
+                personalization_log_dictionary_keys = personalization_log_dictionary_keys + task_policy_log_dic
+                
+                
+                _, d_step, d_score, _ = self.run_episode(False, False)
+                d_total_episode_step += d_step
                 write_video(self.episode_frame_array, episode, save_path)
-                # print("Episode steps DQN: ", self.episode_step)
-                # print("Score DQN: ", d_score)
                 if self.args.mode == 'both':
                     _, _, d_episode_prefered_region, d_episode_avoid_region = self.oracle.return_counts()
-                    d_cummulative_prefered_region += d_episode_prefered_region
-                    d_cummulative_avoid_region += d_episode_avoid_region
+                    d_cummulative_prefered_region += d_episode_prefered_region/d_step
+                    d_cummulative_avoid_region += d_episode_avoid_region/d_step
+                    task_policy_log_value = [d_score, d_cummulative_prefered_region, d_cummulative_avoid_region,
+                                             d_episode_prefered_region, d_episode_avoid_region]
+                    personalization_log_dictionary_values = personalization_log_dictionary_values + task_policy_log_value
                 elif self.args.mode == 'preference':
                     _, d_episode_prefered_region = self.oracle.return_counts()
                     d_cummulative_prefered_region += d_episode_prefered_region
+                    task_policy_log_value = [d_score, d_cummulative_prefered_region, d_episode_prefered_region]
+                    personalization_log_dictionary_values = personalization_log_dictionary_values + task_policy_log_value
                 elif self.args.mode == 'avoid':
                     _, d_episode_avoid_region = self.oracle.return_counts()
                     d_cummulative_avoid_region += d_episode_avoid_region
-                if self.args.mode == 'preference':
-                    new_log_value = (episode, p_score, p_cummulative_prefered_region, p_episode_prefered_region, d_score, d_cummulative_prefered_region, d_episode_prefered_region)
-                elif self.args.mode == 'avoid':
-                    new_log_value = (episode, p_score, p_cummulative_avoid_region, p_episode_avoid_region, d_score, d_cummulative_avoid_region, d_episode_avoid_region)
-                elif self.args.mode == 'both':
-                    new_log_value = (episode, p_score, p_cummulative_prefered_region, p_cummulative_avoid_region, p_episode_prefered_region, p_episode_avoid_region, d_score, 
-                                     d_cummulative_prefered_region, d_cummulative_avoid_region, d_episode_prefered_region, d_episode_avoid_region)
-                write_log(self.logger, self.personalized_policy_log_dict, new_log_value, self.args.use_logger)
-                
+                    task_policy_log_value = [d_score, d_cummulative_avoid_region, d_episode_avoid_region]
+                    personalization_log_dictionary_values = personalization_log_dictionary_values + task_policy_log_value
+                write_log(self.logger, personalization_log_dictionary_keys, personalization_log_dictionary_values, self.args.use_logger)
+            for fusion in ["product"]:#, "entropy_weighted", "average", "entropy_threshold"]:
+                for eta in self.args.crt:
+                    if self.args.mode == 'both':
+                        print("[INFO] percentage prefered_region {}: ".format(eta), 
+                              globals()["p_cummulative_prefered_region_{}_{}".format(fusion, eta)]/globals()["p_cummulative_total_step_{}_{}".format(fusion, eta)])
+                        print("[INFO] percentage avoid_region {}: ".format(eta),
+                              globals()["p_cummulative_avoid_region_{}_{}".format(fusion, eta)]/globals()["p_cummulative_total_step_{}_{}".format(fusion, eta)])
+                        print("[INFO] percentage prefered_region d_policy", d_cummulative_prefered_region/d_total_episode_step)
+                    elif self.args.mode == 'avoid':
+                        print("[INFO] percentage avoid_region {}: ".format(eta),
+                              globals()["p_cummulative_avoid_region_{}_{}".format(fusion, eta)]/globals()["p_cummulative_total_step_{}_{}".format(fusion, eta)])
+                    else:
+                        print("[INFO] percentage prefered_region p_policy {}: ".format(eta),
+                              globals()["p_cummulative_prefered_region_{}_{}".format(fusion, eta)]/globals()["p_cummulative_total_step_{}_{}".format(fusion, eta)])
+            print("[INFO] percentage prefered_region d_policy", d_cummulative_prefered_region/d_total_episode_step)
             #Dumping log data as csv file
             #self.df.to_csv(self.dump_dir + '/Visitation.csv')  
             #Running DQN policy alone to see improvement. Epsilon is already set to 0

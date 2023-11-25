@@ -352,7 +352,7 @@ class LSTM():
     def update_model(self, loss, model, optimizer, retain_graph=False):
         optimizer.zero_grad()
         loss.backward(retain_graph = retain_graph)
-        clip_grad_norm_(model.parameters(), 0.50)
+        clip_grad_norm_(model.parameters(), 10.0)
         optimizer.step()
               
     # Trains the LSTM until -on average- the main loss is below 0.25.
@@ -362,7 +362,7 @@ class LSTM():
             print("[INFO] LSTM model loaded from ", self.config["REWARD_LEARNING"]['model_dir'])
         else:
             lstm_update = 0
-            lstm_n_updates = 50000#self.config["REWARD_LEARNING"]["n_update"]
+            lstm_n_updates = 40000#self.config["REWARD_LEARNING"]["n_update"]
             pbar_lstm = tqdm(total=lstm_n_updates)
             # Get samples from the lesson buffer and prepare them.
             train_observations, train_action, rewards, train_len, indices = self.buffer.sample(self.config["REWARD_LEARNING"]["size"])
@@ -370,10 +370,10 @@ class LSTM():
             train_observations = torch.tensor(train_observations).to(device)
             train_action = torch.tensor(train_action).to(device)
             rewards = torch.tensor(rewards).to(device)
+            returns = torch.sum(rewards, 1, keepdim=True)
             train_len = torch.tensor(train_len).to(device)
             state_encoding = train_observations
             while lstm_update < lstm_n_updates:
-                returns = torch.sum(rewards, 1, keepdim=True)
                 q_values, q_estimate, _ = self.model(state_encoding, train_action, train_len)
                 #Calculating loss
                 main_loss = self.calculate_main_loss(q_values.squeeze(-1), returns.squeeze(-1), train_len.type(torch.int64).squeeze(-1))
@@ -390,5 +390,9 @@ class LSTM():
                 write_log(self.logger, log_keys, log_value, None)
                 pbar_lstm.set_description("LSTM Loss {}".format(main_loss))
                 pbar_lstm.update(1)
+                if lstm_update % 15000 == 0:
+                    checkpoint = {"lstm_weight" : self.model.state_dict()}
+                    path = self.dump_dir + '/lstm_{}.tar'.format(lstm_update)
+                    torch.save(checkpoint, path)
                 lstm_update += 1
             pbar_lstm.close()

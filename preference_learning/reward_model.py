@@ -13,13 +13,13 @@ class PEBBLE(nn.Module):
                  config,
                  input_size = 6,
                  output_size = 1,
-                 hidden_sizes = [256,512]):
+                 hidden_sizes = [256,512,256]): #[256,512]
         super(PEBBLE, self).__init__()
         self.model = MLP(input_size = input_size,
                          output_size = output_size,
                          hidden_sizes = hidden_sizes,
                          hidden_activation = torch.nn.LeakyReLU(),
-                         output_activation = torch.tanh
+                         output_activation = torch.tanh,
                          dropout_prob = 0.3).to(device)
         self.config = config
         self.n_actions = self.config["REWARD_LEARNING"]["n_actions"]

@@ -14,6 +14,8 @@ class Pong(gym.Wrapper):
 
     def step(self, action):
         observation, reward, self.done, info = self.env.step(action)
+        if action == 2:
+           observation[1] =  0   
         if reward == -6:
             reward = -1
         elif reward == 6:
@@ -21,6 +23,8 @@ class Pong(gym.Wrapper):
         self.episode_step += 1
         if self.truncate:
             truncated = self.is_episode_done()
+            # if truncated:
+            #     reward = 0.5
         else:
             truncated = False
         return observation, reward, self.done, truncated, info

@@ -1,12 +1,12 @@
 REWARD_LEARNING:
-    size : 1000
+    size : 1500
     feature_size : 7
     input_size : 6
     n_actions : 3
     action_embedding_dim : 6
     return_scaling : 1
     continuous_pred_factor : 0.10
-    batch_size : 5000
+    batch_size : 2500
     n_units : 512
     n_layers : 1 #This is number of LSTM layers
     early_stopping_patience : 9
@@ -21,8 +21,8 @@ REWARD_LEARNING:
     is_cnn_encoding : True #Don't forgot to change the value in run_game.py as well
     is_FiLM : True
     is_feedback_binary : False
-    is_load_lstm : False
-    model_dir : "Result/2023-10-26_11-58-25_Z8RXJH/lstm.tar"
+    is_load_lstm : True
+    model_dir : "Result/2023-11-23_10-42-52_G476DS/lstm.tar"
 MLP:
     fc_hidden_sizes : [32]
     embed_size : 32

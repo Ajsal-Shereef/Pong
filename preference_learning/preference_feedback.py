@@ -16,7 +16,7 @@ class FeedBack():
         # lens = self.buffer.lstm_reply_buffer.lens_buffer
         # action_one_hot = custom_action_encoding(actions, self.n_actions, self.action_embedding_dim)
         # human_feedback = self.buffer.lstm_reply_buffer.rewards_buffer
-        human_feedback = human_feedback[:,-1]
+        human_feedback = human_feedback.sum(axis=1)
         for i in range(self.size):
             for j in range(i+1, self.size):
                 self.feedback_array.append(human_feedback[i] > human_feedback[j])

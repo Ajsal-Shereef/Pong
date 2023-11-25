@@ -50,8 +50,10 @@ def calculate_dqn_loss(model, target_model, experiences, gamma,
     target = rewards + gamma * next_q_value * masks
     target = target.to(device)
 
+    mean = torch.mean(torch.absolute(curr_q_value-target.detach()))
+
     # calculate dq loss
-    dq_loss_element_wise = F.mse_loss(curr_q_value, target.detach(), reduction="none")
+    dq_loss_element_wise = F.smooth_l1_loss(curr_q_value, target.detach(), reduction="none")
 
     return dq_loss_element_wise, q_values
 

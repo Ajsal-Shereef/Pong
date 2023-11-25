@@ -25,6 +25,7 @@ class TrainingHandler():
         n_actions = config["REWARD_LEARNING"]["n_actions"]
         action_embedding_dim = config["REWARD_LEARNING"]["action_embedding_dim"]
         self.model = PEBBLE(self.config)
+        self.logger.watch_wandb(self.model)
         self._init_network(self.config)
         self.feedback = FeedBack(config["REWARD_LEARNING"]["size"])
         self.loss = nn.BCELoss()
@@ -57,7 +58,7 @@ class TrainingHandler():
     def update_model(self, loss, model, optimizer, retain_graph=False):
         optimizer.zero_grad()
         loss.backward(retain_graph = retain_graph)
-        clip_grad_norm_(model.parameters(), 0.50)
+        clip_grad_norm_(model.parameters(), 10.0)
         optimizer.step()
     
     def get_relative_probability(self, reward_traje_1, reward_traje_2, length):
@@ -98,7 +99,7 @@ class TrainingHandler():
             print("[INFO] PEBBLE model loaded from ", self.config["REWARD_LEARNING"]['model_dir'])
         else:
             update = 0
-            n_updates = 30000#self.config["REWARD_LEARNING"]["n_update"]
+            n_updates = 7000#self.config["REWARD_LEARNING"]["n_update"]
             pbar_lstm = tqdm(total=n_updates)
             while update < n_updates:
                 trajectory_states, trajectory_actions, feedback_array, length_array, indices = self.sample(self.trajectory_states, self.trajectory_actions, self.feedback_array, self.length_array, self.config["REWARD_LEARNING"]["batch_size"])
@@ -117,6 +118,6 @@ class TrainingHandler():
                 pbar_lstm.set_description("Loss {}".format(loss.detach().item()))
                 pbar_lstm.update(1)
                 update += 1
-            pbar_lstm.close()    
+            pbar_lstm.close()  
         
     

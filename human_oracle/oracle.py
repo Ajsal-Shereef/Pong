@@ -27,18 +27,18 @@ class HumanOracle():
         
     def get_feedback(self, observation, mode):
         if mode == 'avoid':
-            if 22<observation[0]<28:
+            if 0<=observation[0]<=7 or 41<=observation[0]<=48:
                 self.episode_avoid_region += 1
                 return -1
         elif mode == 'preference':
-            if 42<observation[0]<=48 or 0<observation[0]<=8:
+            if 16<observation[0]<=31:
                 self.episode_prefered_region += 1
                 return 1
         elif mode == 'both':
-            if 22<observation[0]<28:
+            if 0<=observation[0]<=7 or 41<=observation[0]<=48:
                 self.episode_avoid_region += 1
                 return -1
-            elif 42<observation[0]<=48 or 0<observation[0]<=8:
+            elif 16<observation[0]<=31:
                 self.episode_prefered_region += 1
                 return 1
         return 0
