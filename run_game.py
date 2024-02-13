@@ -13,7 +13,7 @@ from utils.utils import create_dump_directory, get_config_file
 
 
 experiment_log_dir = 'tmp/'
-wandb_project_name = 'Pong_testing'
+wandb_project_name = 'Pong_ECML'
 
 warnings.filterwarnings("ignore")
 
@@ -22,7 +22,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Expalainable AI")
     parser.add_argument("--env", type=str, default="Pong",
                         help="Environement to use")
-    parser.add_argument("--use_logger", dest="use_logger", action="store_true", default=False,
+    parser.add_argument("--use_logger", dest="use_logger", action="store_true", default=True,
                         help="whether store the results in logger")
     parser.add_argument("--log", dest="log", action="store_true",
                         help="turn on logging")
@@ -32,7 +32,7 @@ def parse_args():
                         help="total steps in an episode")
     parser.add_argument("--personalization_num_episode", type=int, default=20, #This is personalization number. Do not change this!!!!!!!!!!!!!!!! 
                         help="Personalization algorithm num_episode")
-    parser.add_argument("--dqn_training", type=bool, default=False,
+    parser.add_argument("--dqn_training", type=bool, default=True,
                         help="Whether DQN is training")
     parser.add_argument("--pref_model", type=str, default='LSTM',
                         help="Whether the preference model is LSTM/PEBBLE")
@@ -54,11 +54,11 @@ def parse_args():
                         help="Seed")
     parser.add_argument("--max_score", type=int, default=1,
                         help="Maximum score")
-    parser.add_argument("--t_max", type=int, default=75,
+    parser.add_argument("--t_max", type=int, default=30,
                         help="Maximum score")
-    parser.add_argument("--dqn_temp", type=int, default=0.05,
-                        help="Maximum score")
-    parser.add_argument("--num_action", type=int, default=3,
+    parser.add_argument("--dqn_temp", type=int, default=0.03,
+                        help="DQN temperature")
+    parser.add_argument("--num_action", type=int, default=2,
                         help="Number of action in the env")
     parser.add_argument("--mode", type=str, default='preference',
                         help="preference/avoid/both")
@@ -81,18 +81,18 @@ def run_game():
     np.random.seed(args.seed)
     
     if args.num_action == 3:
-        dqn_model_dir = "Result/2023-11-23_23-02-33_7YUKDD/dqn_model.tar"
+        dqn_model_dir = "Result/DQN_model_5000/dqn_model.tar"
     else:
         dqn_model_dir = "Result/2023-11-20_14-19-00_4Z5HZM/dqn_model.tar"
     
     
-    env = Env(args.max_steps, True, args.max_score, args.cpu_complexity)
+    env = Env(args.max_steps, True, args.max_score, args.cpu_complexity, args.num_action)
     env = env.get_env()
     env.seed(args.seed)
     policy_args = args
     policy_log_cfg = Dict()
     policy_config = Dict(dict(gamma=0.8,
-                                    target_network_update_interval=15000,
+                                    target_network_update_interval=5000,
                                     #tau=1e-3,
                                     buffer_size=int(2e5),  # open-ai baselines: int(1e4)
                                     batch_size=2500,  # open-ai baselines: 32
@@ -104,14 +104,16 @@ def run_game():
                                     reward_scale=1.0,
                                     gradient_clip=10.0,  # dueling: 10.0
                                     # N-Step Buffer
-                                    n_step=5,  # if n_step <= 1, use common replay buffer otherwise n_step replay buffer
+                                    n_step=0,  # if n_step <= 1, use common replay buffer otherwise n_step replay buffer
                                     w_n_step=1.0,  # used in n-step update
                                     # Double Q-Learning
                                     use_double_q_update=True,
+                                    max_entropy_regularization = True,
                                     # Prioritized Replay Buffer
                                     use_prioritized=True,
                                     per_alpha=0.6,  # open-ai baselines default: 0.6, alpha -> 1, full prioritization
                                     per_beta=0.4,  # beta can start small (for stability concern and anneals towards 1)
+                                    max_entropy_alpha = 0.1,
                                     per_eps=1e-6,
                                     std_init=0.5,
                                     # Epsilon Greedy
@@ -154,6 +156,7 @@ def run_game():
         #     text = text + '_{}_units'.format(lstm_config["REWARD_LEARNING"]["n_units"])
         # else:
         #     text = text + '_{}_batch_size'.format(lstm_config["REWARD_LEARNING"]["batch_size"])
+        #text = text + "bat"
         text = text + "{}".format(args.seed)
         text += '_{}'.format(policy_config["min_epsilon"])
         text = text + "_{}".format(args.mode)

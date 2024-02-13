@@ -32,6 +32,7 @@ class HumanOracle():
                 return -1
         elif mode == 'preference':
             if 16<observation[0]<=31:
+            #if ((0<=observation[4]<=8) or (42<=observation[4]<=48)) and (54<=observation[3]<=64):
                 self.episode_prefered_region += 1
                 return 1
         elif mode == 'both':

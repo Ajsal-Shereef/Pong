@@ -74,11 +74,13 @@ class DQNAgent(Agent):
         self.per_beta = hyper_params.per_beta
         self.use_n_step = hyper_params.n_step > 1
         self.use_prioritized = hyper_params.use_prioritized
+        self.use_max_entropy_regularization = hyper_params.max_entropy_regularization
 
 
         self.max_epsilon = hyper_params.max_epsilon
         self.min_epsilon = hyper_params.min_epsilon
         self.epsilon = hyper_params.max_epsilon
+        self.max_entropy_alpha = hyper_params.max_entropy_alpha
 
         self._initialize()
         self._init_network()
@@ -374,24 +376,24 @@ class DQNAgent(Agent):
         """Train the model after each episode."""
         # 1 step loss
         if self.use_prioritized:
-            experiences_one_step = self.memory.sample(self.per_beta)
-            weights, indices = experiences_one_step[-3:-1]
+            experiences = self.memory.sample(self.per_beta)
+            weights, indices = experiences[-3:-1]
             indices = np.array(indices)
             # re-normalize the weights such that they sum up to the value of batch_size
             weights = weights/torch.sum(weights)*float(self.hyper_params.batch_size)
         else:
             indices = np.random.choice(len(self.memory), size=self.hyper_params.batch_size, replace=False)
             weights = torch.from_numpy(np.ones(shape=(indices.shape[0], 1), dtype=np.float64)).type(torch.FloatTensor).to(device)
-            experiences_one_step = self.memory.sample(indices=indices)
+            experiences = self.memory.sample(indices=indices)
 
-        dq_loss_element_wise, q_values = self._get_dqn_loss(experiences_one_step, self.hyper_params.gamma)
+        dq_loss_element_wise, q_values = self._get_dqn_loss(experiences, self.hyper_params.gamma)
         dq_loss = torch.mean(dq_loss_element_wise * weights)
 
         # n step loss
         if self.use_n_step:
-            experiences_n = self.memory_n.sample(indices)
+            experiences = self.memory_n.sample(indices)
             gamma = self.hyper_params.gamma ** self.hyper_params.n_step
-            dq_loss_n_element_wise, q_values_n = self._get_dqn_loss(experiences_n, gamma)
+            dq_loss_n_element_wise, q_values_n = self._get_dqn_loss(experiences, gamma)
 
             # to update loss and priorities
             q_values = 0.5 * (q_values + q_values_n)
@@ -401,6 +403,12 @@ class DQNAgent(Agent):
 
         # total loss
         loss = dq_loss
+        
+        #Max entropy regularization
+        if self.use_max_entropy_regularization:
+            log_probs = torch.log(torch.softmax(self.dqn(experiences[0].unsqueeze(1))[0], dim=1))
+            entropy = -torch.sum(torch.exp(log_probs) * log_probs, dim=1).mean()
+            loss = dq_loss + self.max_entropy_alpha * entropy.mean()
 
         # q_value regularization (not used when w_q_reg is set to 0)
         if self.optim_cfg.w_q_reg > 0:
@@ -484,6 +492,8 @@ class DQNAgent(Agent):
             self.episode_step += 1
             action, _ = self.select_action(self.previous_state, is_personalization)
             self.next_state, reward, terminated, truncated, info = self.step(action)
+            #if ((0<=self.next_state[4]<=8) or (42<=self.next_state[4]<=48)) and (54<=self.next_state[3]<=64):
+            #    print("Within")
             #time.sleep(0.05)
             #self.next_state = np.array(self.next_state._frames).flatten()
             done = terminated + truncated

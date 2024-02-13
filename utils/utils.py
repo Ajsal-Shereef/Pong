@@ -158,14 +158,14 @@ def standardize(img):
     return img
 
 def snip_trajectories(train_observations, train_action, rewards, train_len):
-        lower_bound = np.random.randint(0, np.clip(train_len-50, 1, train_len))
-        upper_bound = lower_bound + 50
+        lower_bound = np.random.randint(0, np.clip(train_len-100, 1, train_len))
+        upper_bound = lower_bound + 100
         indices = np.array([np.arange(start, end) for start, end in zip(lower_bound, upper_bound)])
         train_action = np.take_along_axis(train_action, indices, 1)
         rewards = np.take_along_axis(rewards, indices, 1)
         indices = np.expand_dims(indices, -1)
         train_observations = np.take_along_axis(train_observations, indices, 1)
-        train_len = np.clip(train_len, 0, 50)
+        train_len = np.clip(train_len, 0, 100)
         return train_observations, train_action, rewards, train_len
 
 def softmax_temperature(x, tau):

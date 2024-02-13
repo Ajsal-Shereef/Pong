@@ -3,9 +3,10 @@ import gym
 #sys.modules["gym"] = gymnasium
 
 class Pong(gym.Wrapper):
-    def __init__(self, env, truncate, max_steps):
+    def __init__(self, env, truncate, max_steps, num_action):
         super().__init__(env)
         self.max_steps = max_steps
+        self.num_action = num_action
         
         self.cummulative_avoid_region = 0
         self.cummulative_prefered_region = 0
@@ -14,8 +15,8 @@ class Pong(gym.Wrapper):
 
     def step(self, action):
         observation, reward, self.done, info = self.env.step(action)
-        if action == 2:
-           observation[1] =  0   
+        # if action == 2:
+        #    observation[1] =  0   
         if reward == -6:
             reward = -1
         elif reward == 6:
@@ -23,8 +24,8 @@ class Pong(gym.Wrapper):
         self.episode_step += 1
         if self.truncate:
             truncated = self.is_episode_done()
-            # if truncated:
-            #     reward = 0.5
+            if truncated:
+                reward = 0
         else:
             truncated = False
         return observation, reward, self.done, truncated, info
