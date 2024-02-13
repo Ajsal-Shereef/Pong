@@ -1,0 +1,15 @@
+Result/
+tmp/
+Trajectory/
+dqn/__pycache__
+env/__pycache__
+human_oracle/__pycache__
+learning_agent/architectures/__pycache__
+utils/__pycache__
+wandb
+lstm/__pycache__
+reply_buffer/__pycache__
+logger/__pycache__
+preference_learning/__pycache__
+learning_agent/__pycache__
+learning_agent/__pycache__
